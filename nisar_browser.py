@@ -724,12 +724,23 @@ def run_clip(job_id, ids, layers, workers):
 
 
 # ------------------------------------------------------------------ http
+def _clean(v):
+    """JSON has no NaN/Infinity: the browser's JSON.parse rejects them ("Unexpected token 'N'"), so send null instead"""
+    if isinstance(v, float):
+        return v if math.isfinite(v) else None
+    if isinstance(v, dict):
+        return {k: _clean(x) for k, x in v.items()}
+    if isinstance(v, (list, tuple)):
+        return [_clean(x) for x in v]
+    return v
+
+
 class H(BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
 
     def _send(self, obj, code=200):
-        body = json.dumps(obj, default=str).encode()
+        body = json.dumps(_clean(obj), default=str, allow_nan=False).encode()
         self.send_response(code)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
