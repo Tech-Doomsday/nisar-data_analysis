@@ -1,0 +1,414 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NISAR granule browser</title>
+<style>
+:root{--bg:#eceff3;--panel:#f8f9fb;--ink:#17212b;--mute:#5d6b7a;--line:#cfd6de;--asc:#0b7285;--desc:#5f3dc4;--sel:#f08c00;
+--font:"Aptos","Segoe UI",system-ui,sans-serif;--mono:ui-monospace,"Cascadia Mono",Consolas,monospace}
+@media (prefers-color-scheme:dark){:root{--bg:#12181f;--panel:#1a222b;--ink:#e6ebf0;--mute:#93a1b0;--line:#2e3a47;--asc:#3bc9db;--desc:#a78bfa;--sel:#ffa94d}}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--ink);font:14px/1.45 var(--font);display:grid;grid-template-rows:auto auto 1fr auto;grid-template-columns:1fr 380px}
+header,.filters,.clipbar{grid-column:1/3;background:var(--panel);border-bottom:1px solid var(--line);padding:8px 14px;display:flex;flex-wrap:wrap;gap:8px 14px;align-items:end}
+.clipbar{border-top:1px solid var(--line);border-bottom:0}
+h1{font-size:15px;margin:0 8px 0 0;font-weight:650;align-self:center}
+label{display:flex;flex-direction:column;font-size:12px;color:var(--mute);gap:2px}
+input,select,button{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:4px 7px}
+input{width:92px}input.wide{width:150px}input.w3{width:58px}
+button{cursor:pointer;background:var(--ink);color:var(--bg);border-color:var(--ink)}
+button.ghost{background:transparent;color:var(--ink)}
+button:disabled{opacity:.45;cursor:default}
+:focus-visible{outline:2px solid var(--sel);outline-offset:1px}
+#tl{position:relative;overflow:auto;min-height:0;user-select:none}
+#tl svg{display:block;width:100%}
+#side{border-left:1px solid var(--line);background:var(--panel);overflow:auto;padding:12px 14px;min-height:0}
+#status{color:var(--mute);margin-left:auto;align-self:center}
+#tip{position:fixed;pointer-events:none;background:var(--ink);color:var(--bg);padding:4px 8px;border-radius:4px;font-size:12px;display:none;white-space:pre;z-index:5}
+.bar{cursor:pointer}
+.lbl{font-size:11px;fill:#fff;pointer-events:none}
+.axis text{font-size:11px;fill:var(--mute)}
+.grp{font-size:11px;fill:var(--ink);font-weight:600}
+dl{display:grid;grid-template-columns:auto 1fr;gap:3px 12px;margin:8px 0}
+dt{color:var(--mute)}dd{margin:0;font-variant-numeric:tabular-nums;word-break:break-all}
+.id{font:11px var(--mono);word-break:break-all;color:var(--mute)}
+details{border-top:1px solid var(--line);padding:6px 0}
+summary{cursor:pointer;font-weight:600}
+.kv{font:11px/1.5 var(--mono);word-break:break-all;max-height:260px;overflow:auto}
+.kv b{color:var(--mute);font-weight:400}
+.yes{color:var(--asc);font-weight:600}.no{color:var(--mute)}
+.err{color:#c92a2a}
+.mono{font-family:var(--mono)}
+#jobs{font:12px var(--mono);color:var(--mute);max-height:64px;overflow:auto;flex:1;min-width:240px}
+#ov{position:fixed;inset:0;background:var(--bg);z-index:20;display:flex}#ov[hidden]{display:none}
+.ovbox{flex:1;display:grid;grid-template-rows:auto 1fr 220px;min-width:0;min-height:0}
+.ovhead{display:flex;gap:14px;align-items:center;padding:8px 14px;background:var(--panel);border-bottom:1px solid var(--line)}.ovhead button{margin-left:auto}
+.ovbody{display:grid;grid-template-columns:490px 1fr;min-height:0}
+.ovl{border-right:1px solid var(--line);background:var(--panel);display:flex;flex-direction:column;min-height:0}.ovl .scroll{flex:1;overflow:auto;padding:10px 14px}
+.step{display:grid;grid-template-columns:1fr auto;gap:2px 10px;padding:3px 0}.step .d{grid-column:1/3;color:var(--mute);font-size:12px}
+.pill{font:11px var(--mono);padding:1px 7px;border-radius:9px;border:1px solid var(--line);color:var(--mute);white-space:nowrap;max-width:210px;overflow:hidden;text-overflow:ellipsis}
+.pill.ok{color:var(--asc);border-color:var(--asc)}.pill.run{color:var(--sel);border-color:var(--sel)}.pill.bad{color:#c92a2a;border-color:#c92a2a}
+.tb{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:6px 0}.tb input[type=text],#ovf{width:150px}
+.cat{border-top:1px solid var(--line);padding:5px 0}.cat summary{display:flex;gap:8px;align-items:center;font-weight:400}.cat summary .id{font-family:var(--font)}
+.lr{display:grid;grid-template-columns:auto 1fr auto;gap:6px;align-items:start;padding:3px 0 3px 22px;font-size:12px;color:var(--ink)}.lr .id{font-size:11px}
+.act{border-top:1px solid var(--line);padding:10px 14px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}.act #ovsum{flex:1;min-width:200px}
+.bar{flex-basis:100%;height:6px;background:var(--line);border-radius:3px;overflow:hidden}.bar i{display:block;height:100%;width:0;background:var(--sel);transition:width .2s}
+.ovr{overflow:auto;padding:12px 14px;display:grid;grid-template-columns:repeat(auto-fill,minmax(420px,1fr));gap:18px;align-content:start}
+.ovlog{border-top:1px solid var(--line);background:var(--panel);display:flex;flex-direction:column;min-height:0;padding:2px 14px 6px}
+#ovlog{flex:1;overflow:auto;margin:0;font:11px/1.5 var(--mono);white-space:pre-wrap;word-break:break-all}
+#ovlog .WARN{color:var(--sel)}#ovlog .ERROR{color:#c92a2a}#ovlog .DEBUG{color:var(--mute)}
+.card canvas{display:block;width:100%;height:auto;image-rendering:pixelated;border:1px solid var(--line);margin:4px 0;cursor:crosshair}
+.ctl{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--mute)}.ctl input{width:70px}.ctl input[type=range]{width:90px;padding:0}
+</style>
+</head>
+<body>
+<header>
+  <h1>NISAR granules</h1>
+  <label>West<input id="w"></label><label>South<input id="s"></label>
+  <label>East<input id="e"></label><label>North<input id="n"></label>
+  <label>Level<input id="level" class="w3"></label>
+  <label>From<input id="start" type="date"></label><label>To<input id="end" type="date"></label>
+  <button id="go">Search</button><span id="status"></span>
+</header>
+<div class="filters">
+  <label>Day of month<input id="dom" class="wide" placeholder="e.g. 5, 17, 20-25"></label>
+  <label>UTC time from<input id="tfrom" type="time"></label><label>to<input id="tto" type="time"></label>
+  <label>Applies to<select id="on"><option value="either">either date</option><option value="ref">reference</option><option value="sec">secondary</option></select></label>
+  <label>Direction<select id="dir"><option value="">both</option><option>A</option><option>D</option></select></label>
+  <label>Track<input id="track" class="w3" placeholder="all"></label>
+  <label>Text<input id="text" class="wide" placeholder="in file name"></label>
+  <label style="flex-direction:row;align-items:center;gap:5px"><input id="inview" type="checkbox" style="width:auto">only in view</label>
+  <button class="ghost" id="reset">Reset view</button>
+</div>
+<div id="tl"><svg id="svg" height="300"></svg></div>
+<aside id="side"><p style="color:var(--mute)">Search, then click a bar. Wheel zooms the time axis, drag pans, double-click resets.</p></aside>
+<div class="clipbar">
+  <label>Layers to keep (regex)<input id="layers" class="wide" style="width:360px" placeholder="empty = everything"></label>
+  <label>Preset<select id="preset"><option value="">choose…</option>
+    <option value="">everything</option>
+    <option value="unwrappedPhase|coherence|connectedComponents|ionosphere|radarGrid">80 m + corrections</option>
+    <option value="ionosphere|radarGrid">corrections only</option></select></label>
+  <label>Workers<input id="workers" class="w3" value="4"></label>
+  <button id="clip" disabled>Clip</button>
+  <div id="jobs"></div>
+</div>
+<div id="ov" hidden role="dialog" aria-modal="true" aria-labelledby="ovt"><div class="ovbox">
+  <div class="ovhead"><b id="ovt">Load cropped data</b><span class="id" id="ovsub"></span><button class="ghost" id="ovx">Close (Esc)</button></div>
+  <div class="ovbody">
+    <section class="ovl"><div class="scroll"><div id="ovsteps"></div>
+      <div id="ovsel" hidden><div class="tb"><button class="ghost" data-pre="core">Core</button><button class="ghost" data-pre="corr">Corrections</button><button class="ghost" data-pre="all">All</button><button class="ghost" data-pre="none">None</button><input id="ovf" placeholder="filter layers"></div><div id="ovcats"></div></div></div>
+      <div class="act"><div id="ovsum"></div><button id="ovgo" disabled>Load</button><button class="ghost" id="ovcancel" hidden>Cancel</button><div class="bar"><i id="ovbar"></i></div></div></section>
+    <section class="ovr" id="ovgrid"></section>
+  </div>
+  <div class="ovlog"><div class="tb"><b>Log</b><select id="lvl"><option value="DEBUG">all (debug)</option><option value="INFO">info and up</option><option value="WARN">warnings and errors</option></select><button class="ghost" id="lcopy">Copy</button><button class="ghost" id="ldl">Save .log</button><span class="id" id="lcount"></span></div><pre id="ovlog"></pre></div>
+</div></div>
+<div id="tip"></div>
+<script>
+"use strict";
+const $=id=>document.getElementById(id), DAY=864e5;
+let G=[], F=[], sel=null, view=[0,1], full=[0,1], rows=[], W=800, cfg={};
+const iso=t=>Date.parse(t);
+const fmt=(ms,time)=>new Date(ms).toISOString().slice(0,time?16:10).replace("T"," ");
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const api=async(p,body)=>{const r=await fetch(p,body?{method:"POST",body:JSON.stringify(body)}:{});const j=await r.json();if(j.error)throw new Error(j.error);return j};
+
+/* ---------- filters (client side, instant) ---------- */
+function domSet(txt){const s=new Set();for(const part of txt.split(",")){const m=part.trim().match(/^(\d+)(?:\s*-\s*(\d+))?$/);if(m)for(let d=+m[1];d<=+(m[2]||m[1]);d++)s.add(d)}return s}
+function tod(ms){const d=new Date(ms);return d.getUTCHours()*60+d.getUTCMinutes()}
+function hm(v){if(!v)return null;const[a,b]=v.split(":");return +a*60+ +b}
+function acqs(g){const on=$("on").value,a=[];if(on!=="sec"&&g.ref)a.push(iso(g.ref));if(on!=="ref"&&g.sec)a.push(iso(g.sec));return a.length?a:[iso(g.t0)]}
+function applyFilters(){
+  const doms=domSet($("dom").value),hasDom=$("dom").value.trim()&&doms.size,f=hm($("tfrom").value),t=hm($("tto").value);
+  const dir=$("dir").value,tr=$("track").value.split(",").map(x=>x.trim()).filter(Boolean),tx=$("text").value.trim().toLowerCase();
+  F=G.filter(g=>{
+    if(dir&&g.dir!==dir)return false;
+    if(tr.length&&!tr.includes(String(g.track)))return false;
+    if(tx&&!g.id.toLowerCase().includes(tx))return false;
+    if(hasDom||f!==null||t!==null){
+      const ok=acqs(g).some(ms=>{
+        if(hasDom&&!doms.has(new Date(ms).getUTCDate()))return false;
+        if(f===null&&t===null)return true;
+        const m=tod(ms);
+        if(f!==null&&t!==null)return f<=t?(m>=f&&m<=t):(m>=f||m<=t);
+        return f!==null?m>=f:m<=t});
+      if(!ok)return false}
+    return true});
+  layout();draw();status();
+}
+function shown(){return $("inview").checked?F.filter(g=>iso(g.t1)>=view[0]&&iso(g.t0)<=view[1]):F}
+function status(){const n=shown().length;$("status").textContent=G.length?`${F.length} of ${G.length} granules match`+($("inview").checked?`, ${n} in view`:""):"";
+  $("clip").textContent=`Clip ${n} granule${n===1?"":"s"}`;$("clip").disabled=!n}
+
+/* ---------- timeline ---------- */
+const ROW=16,GAP=14,TOP=28,LEFT=64;
+function layout(){ // one group per track+direction, bars packed into rows inside the group
+  const groups={};F.forEach(g=>(groups[g.dir+String(g.track).padStart(3,"0")]??=[]).push(g));
+  rows=[];let y=TOP;
+  Object.keys(groups).sort().forEach(k=>{
+    const lanes=[];groups[k].sort((a,b)=>iso(a.t0)-iso(b.t0)).forEach(g=>{
+      const a=iso(g.t0),b=iso(g.t1)+DAY*.6;let i=lanes.findIndex(e=>e<=a);if(i<0){i=lanes.length;lanes.push(0)}lanes[i]=b;g._y=y+i*ROW});
+    rows.push({label:`${groups[k][0].dir} ${groups[k][0].track}`,y,h:lanes.length*ROW});y+=lanes.length*ROW+GAP});
+  $("svg").setAttribute("height",Math.max(y+10,200));
+}
+function ticks(){
+  const span=view[1]-view[0],out=[];
+  if(span>200*DAY){const d=new Date(view[0]);d.setUTCDate(1);d.setUTCHours(0,0,0,0);const step=span>900*DAY?12:span>400*DAY?3:1;
+    for(;+d<=view[1];d.setUTCMonth(d.getUTCMonth()+step))if(+d>=view[0])out.push([+d,d.toISOString().slice(0,7)])}
+  else{const steps=[3600e3,6*3600e3,DAY,2*DAY,7*DAY,14*DAY,30*DAY],st=steps.find(s=>span/s<=10)||steps[steps.length-1];
+    for(let t=Math.ceil(view[0]/st)*st;t<=view[1];t+=st)out.push([t,st<DAY?fmt(t,1).slice(5):fmt(t).slice(5)])}
+  return out}
+function draw(){
+  const svg=$("svg");W=svg.clientWidth||800;const k=(W-LEFT-10)/(view[1]-view[0]),X=ms=>LEFT+(ms-view[0])*k;
+  let h=`<g class="axis">`;
+  for(const[t,l]of ticks()){const x=X(t);h+=`<line x1="${x}" x2="${x}" y1="${TOP-6}" y2="100%" stroke="var(--line)" stroke-width="1"/><text x="${x+3}" y="${TOP-12}">${l}</text>`}
+  h+=`</g>`;
+  for(const r of rows)h+=`<text class="grp" x="6" y="${r.y+11}">${r.label}</text>`;
+  const q=shown(),inQ=new Set(q.map(g=>g.id)),sh=$("inview").checked;
+  for(const g of F){
+    const a=iso(g.t0),b=iso(g.t1);if(b<view[0]-DAY||a>view[1]+DAY)continue;
+    const x=X(a),w=Math.max(4,(b-a)*k),col=g.dir==="A"?"var(--asc)":"var(--desc)",on=sel&&sel.id===g.id;
+    h+=`<g class="bar" data-id="${esc(g.id)}"><rect x="${x}" y="${g._y}" width="${w}" height="${ROW-3}" rx="2" fill="${col}" opacity="${sh&&!inQ.has(g.id)?.35:1}" ${on?'stroke="var(--sel)" stroke-width="2.5"':""}/>`;
+    if(w>110){let s=`${g.ref?g.ref.slice(5,10):""} → ${g.sec?g.sec.slice(5,10):""}`;if(w>230)s+=`  ${g.size_mb??"?"} MB`;if(w>330)s+=`  f${g.frame} ${g.pol||""}`;
+      h+=`<text class="lbl" x="${x+5}" y="${g._y+ROW-6}">${esc(s)}</text>`}
+    h+=`</g>`}
+  svg.innerHTML=h;
+}
+function zoom(f,cx){const span=view[1]-view[0],ns=Math.min(Math.max(span/f,3600e3*6),(full[1]-full[0])*1.5),r=(cx-view[0])/span;view=[cx-r*ns,cx+(1-r)*ns];draw();status()}
+const svgEl=$("svg");
+svgEl.addEventListener("wheel",e=>{e.preventDefault();const b=svgEl.getBoundingClientRect(),cx=view[0]+(e.clientX-b.left-LEFT)/(b.width-LEFT-10)*(view[1]-view[0]);zoom(Math.pow(1.0017,-e.deltaY),cx)},{passive:false});
+let drag=null;
+svgEl.addEventListener("pointerdown",e=>{
+  const b=e.target.closest(".bar");   /* read the bar now: after setPointerCapture the target becomes the <svg> */
+  drag={x:e.clientX,v:view.slice(),moved:false,id:b?b.dataset.id:null};
+  svgEl.setPointerCapture(e.pointerId)});
+svgEl.addEventListener("pointermove",e=>{
+  if(drag){const dx=e.clientX-drag.x;if(Math.abs(dx)>3)drag.moved=true;const sp=drag.v[1]-drag.v[0],d=-dx/(svgEl.clientWidth-LEFT-10)*sp;view=[drag.v[0]+d,drag.v[1]+d];draw();return}
+  const bar=e.target.closest(".bar"),tip=$("tip");
+  if(!bar){tip.style.display="none";return}
+  const g=G.find(x=>x.id===bar.dataset.id);
+  tip.textContent=`${g.level}  ${g.dir} track ${g.track} frame ${g.frame}\n${g.ref?fmt(iso(g.ref),1):""}  →  ${g.sec?fmt(iso(g.sec),1):""} UTC\n${g.baseline_days!=null?g.baseline_days.toFixed(0)+" day baseline   ":""}${g.size_mb??"?"} MB   ${g.pol||""}`;
+  tip.style.display="block";tip.style.left=e.clientX+14+"px";tip.style.top=e.clientY+14+"px"});
+svgEl.addEventListener("pointerup",e=>{const was=drag&&drag.moved,id=drag&&drag.id;drag=null;if(was){status();return}
+  const g=id&&G.find(x=>x.id===id);if(g)select(g)});
+svgEl.addEventListener("pointerleave",()=>$("tip").style.display="none");
+svgEl.addEventListener("dblclick",()=>{view=full.slice();draw();status()});
+$("reset").onclick=()=>{view=full.slice();draw();status()};
+new ResizeObserver(()=>draw()).observe($("tl"));
+
+/* ---------- details ---------- */
+function footprint(g,bb){
+  const ring=g.geometry&&g.geometry.coordinates&&g.geometry.coordinates[0];if(!ring)return"";
+  const xs=ring.map(p=>p[0]).concat([bb[0],bb[2]]),ys=ring.map(p=>p[1]).concat([bb[1],bb[3]]);
+  const x0=Math.min(...xs),x1=Math.max(...xs),y0=Math.min(...ys),y1=Math.max(...ys),c=Math.cos((y0+y1)/2*Math.PI/180);
+  const sw=(x1-x0)*c,sh=y1-y0,s=Math.min(340/sw,150/sh),P=p=>`${((p[0]-x0)*c*s+6).toFixed(1)},${((y1-p[1])*s+6).toFixed(1)}`;
+  return `<svg width="${sw*s+12}" height="${sh*s+12}" style="margin:6px 0"><polygon points="${ring.map(P).join(" ")}" fill="${g.dir==="A"?"var(--asc)":"var(--desc)"}" fill-opacity=".25" stroke="${g.dir==="A"?"var(--asc)":"var(--desc)"}"/><rect x="${P([bb[0],bb[3]]).split(",")[0]}" y="${P([bb[0],bb[3]]).split(",")[1]}" width="${(bb[2]-bb[0])*c*s}" height="${(bb[3]-bb[1])*s}" fill="none" stroke="var(--sel)" stroke-width="2"/></svg>`}
+function select(g){
+  sel=g;draw();const bb=[+$("w").value,+$("s").value,+$("e").value,+$("n").value];
+  $("side").innerHTML=`<div class="id">${esc(g.id)}</div>${footprint(g,bb)}
+  <div style="margin:6px 0"><button id="vd">Load data…</button> <button class="ghost" id="rd">Read file metadata</button> <button class="ghost" id="c1">Clip this one</button></div>
+  <dl><dt>Level</dt><dd>${g.level}${g.maturity?" ("+g.maturity+")":""}</dd>
+  <dt>Direction</dt><dd>${g.dir==="A"?"ascending":g.dir==="D"?"descending":g.dir}</dd>
+  <dt>Track / frame</dt><dd>${g.track} / ${g.frame}</dd>
+  <dt>Reference</dt><dd>${g.ref?fmt(iso(g.ref),1)+" UTC":"–"}${g.ref_cycle!=null?" (cycle "+g.ref_cycle+")":""}</dd>
+  <dt>Secondary</dt><dd>${g.sec?fmt(iso(g.sec),1)+" UTC":"–"}${g.sec_cycle!=null?" (cycle "+g.sec_cycle+")":""}</dd>
+  <dt>Baseline</dt><dd>${g.baseline_days!=null?g.baseline_days.toFixed(0)+" days":"–"}</dd>
+  ${extraRows(g)}</dl>
+  <div id="meta"><p class="id">The rows above come from the ASF search record only. Press "Read file metadata" to list what is inside the file: geocoding grid, ionosphere, troposphere, tide, offsets, and so on.</p></div>
+  <details><summary>ASF search properties</summary><div class="kv">${Object.entries(g.props).filter(([k])=>k!=="url").map(([k,v])=>`<b>${esc(k)}</b> ${esc(typeof v==="object"?JSON.stringify(v):v)}`).join("<br>")}</div></details>`;
+  $("vd").onclick=()=>openOverlay(g);$("rd").onclick=()=>readMeta(g);$("c1").onclick=()=>clip([g.id]);
+}
+
+function extraRows(g){
+  const P=g.props||{},j=v=>Array.isArray(v)?v.join(", "):v,row=(k,v)=>v==null||v===""?"":`<dt>${k}</dt><dd>${esc(v)}</dd>`;
+  const ACC={P:"precise",M:"medium",N:"near-real-time",F:"forecast",X:"special",T:"telemetry"};
+  const fm=g.id.match(/_([A-Z]\d{5})_([PMNFXT])_([FP])_[A-Z]_\d{3}$/);
+  const urls=[].concat(P.additionalUrls||[],P.browse||[]).filter(u=>typeof u==="string"&&/^https?:/.test(u));
+  const link=(t,rx)=>{const u=urls.find(x=>rx.test(x));return u?`<a href="${esc(u)}" target="_blank" rel="noopener">${t}</a>`:""};
+  const links=[link("QA report (PDF)",/QA_REPORT\.pdf$/),link("browse image",/NATIVE\.png$/),link("QA summary (CSV)",/QA_SUMMARY\.csv$/)].filter(Boolean).join(" · ");
+  return row("Polarization",g.pol||j(P.mainBandPolarization)||"–")+row("Side-band pol.",j(P.sideBandPolarization))
+   +row("Range bandwidth",P.rangeBandwidth?j(P.rangeBandwidth)+" MHz":null)
+   +row("Collection",P.collectionName)+row("Release (CRID)",P.crid||(fm&&fm[1]))
+   +row("Orbit accuracy",[P.orbitType&&"ASF: "+P.orbitType,fm&&"filename: "+(ACC[fm[2]]||fm[2])].filter(Boolean).join("; "))
+   +row("Frame coverage",P.frameCoverage||(fm&&(fm[3]==="F"?"Full":"Partial")))
+   +row("Processed",P.processingDate)+row("PGE version",P.pgeVersion)
+   +row("File size",g.size_mb!=null?g.size_mb.toLocaleString()+" MB":"not reported")
+   +(links?`<dt>Extras</dt><dd>${links}</dd>`:"")}
+const ITEMS=[
+ ["Unwrapped phase","unwrappedPhase","main deformation layer, radians"],
+ ["Wrapped interferogram","(?<!un)wrappedInterferogram","complex fringes before unwrapping"],
+ ["Coherence","coherence","phase quality, 0 to 1"],
+ ["Connected components","connectedComponents","which pixels were unwrapped together"],
+ ["Ionosphere phase screen","ionosph(?!.*uncertain)","estimate included, not subtracted"],
+ ["Ionosphere uncertainty","ionosph.*uncertain","error estimate of that screen"],
+ ["Troposphere tables","tropo","lookup tables, not removed from the phase"],
+ ["Solid-earth tide table","tide","lookup table, not removed from the phase"],
+ ["Incidence angle / LOS vectors","incidenceAngle|losUnitVector|elevationAngle","needed to turn line-of-sight motion into vertical or horizontal"],
+ ["Baselines","baseline","perpendicular / parallel orbit separation"],
+ ["Pixel offsets","pixelOffsets|slantRangeOffset|alongTrackOffset","sub-pixel shifts from cross-correlation"],
+ ["Intensity / backscatter","amplitude|backscatter|intensity|covariance","GUNW has no separate backscatter layer (that lives in GCOV); closest here is the magnitude of the wrapped interferogram"]];
+function contents(d){
+  const P=d.params||{},pv=rx=>{const k=Object.keys(P).find(k=>rx.test(k));return k?P[k]:null};
+  const epsg=pv(/projection$|epsg/i),sx=pv(/xCoordinateSpacing$/i),sy=pv(/yCoordinateSpacing$/i);
+  let h=`<h4 style="margin:12px 0 2px">What is inside</h4><dl><dt>Geocoded</dt><dd><span class="yes">yes</span> <span class="id">GUNW is already on a ground map grid (slant range converted)`
+   +(epsg!=null?`; EPSG ${esc(epsg)}`:"")+(sx!=null?`; spacing ${esc(Math.abs(sx))}${sy!=null&&Math.abs(sy)!==Math.abs(sx)?" × "+esc(Math.abs(sy)):""} m`:"")+`</span></dd></dl><div class="kv" style="max-height:none">`;
+  for(const[n,rx,note]of ITEMS){
+    const re=new RegExp(rx,"i"),m=d.layers.filter(l=>re.test(l.path));
+    h+=`<div style="margin:6px 0"><b style="color:var(--ink)">${n}</b> ${m.length?`<span class="yes">in file (${m.length})</span>`:`<span class="no">not found</span>`}<br><span class="id">${esc(note)}</span>`
+     +m.slice(0,4).map(l=>`<br><span class="id">${esc(l.dtype)} ${l.shape.join("×")}  ${esc(l.path.split("/").slice(-3).join("/"))}</span>`).join("")
+     +(m.length>4?`<br><span class="id">+${m.length-4} more, see Layers list</span>`:"")+`</div>`}
+  return h+`</div><p class="id">Applied or not: ASF documents that the ionosphere screen is included but not applied to the phase layers, and that the troposphere and tide tables are not removed. This tool cannot read an "applied" flag from the file, so filter Parameters for "ionos", "tropo" and "tide" to see any flag the file does carry.</p>`}
+const yn=a=>a.length?`<span class="yes">in file</span> <span class="id">${a.map(esc).join("<br>")}</span>`:`<span class="no">not found</span>`;
+async function readMeta(g){
+  const m=$("meta"),b=$("rd");b.disabled=true;m.innerHTML=`<p style="color:var(--mute)">Reading headers from the remote file…</p>`;
+  try{const d=await api("/api/meta?id="+encodeURIComponent(g.id)),f=d.facts;
+    m.innerHTML=`<dl><dt>Center frequency</dt><dd>${f.frequency_hz?(f.frequency_hz/1e9).toFixed(4)+" GHz":"not found"}</dd>
+    <dt>Wavelength</dt><dd>${f.wavelength_m?(f.wavelength_m*100).toFixed(3)+" cm <span class=\"id\">("+f.wavelength_source+")</span>":"not found"}</dd>
+    </dl>${contents(d)}
+    <details><summary>Parameters (${Object.keys(d.params).length})</summary><input id="pf" placeholder="filter" style="width:100%;margin:4px 0"><div class="kv" id="pl"></div></details>
+    <details><summary>Layers in file (${d.layers.length})</summary><div class="kv">${d.layers.map(l=>`<b>${l.dtype} ${l.shape.join("×")}</b> ${esc(l.path)}`).join("<br>")}</div></details>
+    <p class="id">read in ${d.seconds}s</p>`;
+    const show=()=>{const t=$("pf").value.toLowerCase();$("pl").innerHTML=Object.entries(d.params).filter(([k,v])=>(k+" "+v).toLowerCase().includes(t)).map(([k,v])=>`<b>${esc(k)}</b> ${esc(Array.isArray(v)?v.join(", "):v)}`).join("<br>")};
+    $("pf").oninput=show;show();
+  }catch(e){m.innerHTML=`<p class="err">${esc(e.message)}</p>`}
+  b.disabled=false}
+
+/* ---------- load-data overlay ---------- */
+const LUTS={};
+function lut(name){
+  if(LUTS[name])return LUTS[name];
+  const st0={viridis:[[68,1,84],[59,82,139],[33,145,140],[94,201,98],[253,231,37]],diverging:[[5,48,97],[67,147,195],[247,247,247],[214,96,77],[103,0,31]],gray:[[0,0,0],[255,255,255]]},u=new Uint8Array(768);
+  for(let i=0;i<256;i++){let r,g,b;
+    if(name==="cyclic"){const h=i/256*6,x=1-Math.abs(h%2-1);[r,g,b]=[[1,x,0],[x,1,0],[0,1,x],[0,x,1],[x,0,1],[1,0,x]][h|0].map(v=>v*255)}
+    else{const st=st0[name],p=i/255*(st.length-1),j=Math.min(st.length-2,p|0),f=p-j;[r,g,b]=st[j].map((v,c)=>v+(st[j+1][c]-v)*f)}
+    u[i*3]=r;u[i*3+1]=g;u[i*3+2]=b}
+  return LUTS[name]=u}
+function catRGB(v){if(v===0)return[50,50,50];const h=(v*137.508)%360/60,x=1-Math.abs(h%2-1);return[[1,x,0],[x,1,0],[0,1,x],[0,x,1],[x,0,1],[1,0,x]][h|0].map(t=>60+t*170)}
+function b64f32(s){const b=atob(s),u=new Uint8Array(b.length);for(let i=0;i<b.length;i++)u[i]=b.charCodeAt(i);return new Float32Array(u.buffer)}
+function defaults(L){
+  if(L.kind==="phase")return{cm:"cyclic",lo:-Math.PI,hi:Math.PI};
+  if(/connectedComponents/i.test(L.path))return{cm:"categorical",lo:0,hi:1};
+  if(/coheren/i.test(L.path))return{cm:"gray",lo:0,hi:1};
+  return{cm:/unwrappedPhase|ionosph|offset/i.test(L.path)?"diverging":"viridis",lo:L.p2??0,hi:L.p98??1}}
+const OV={},LV={DEBUG:0,INFO:1,WARN:2,ERROR:3},hms=t=>new Date(t*1000).toISOString().slice(11,23),mb=b=>b>=1e8?(b/1e6).toFixed(0):(b/1e6).toFixed(1);
+const PRE={core:l=>/unwrappedInterferogram\/.*\/(unwrappedPhase|coherenceMagnitude|connectedComponents)$/.test(l.path),corr:l=>["iono","tropo","tide"].includes(l.cat),all:()=>true,none:()=>false};
+function ovLocal(lvl,msg){OV.logs.push({t:Date.now()/1e3,lvl,msg:"[client] "+msg});renderLog()}
+function renderLog(full){
+  const el=$("ovlog"),min=LV[$("lvl").value],near=el.scrollHeight-el.scrollTop-el.clientHeight<40;
+  if(full){el.textContent="";OV.shown=0}
+  for(;OV.shown<OV.logs.length;OV.shown++){const l=OV.logs[OV.shown];if(LV[l.lvl]<min)continue;
+    const d=document.createElement("div");d.className=l.lvl;d.textContent=`${hms(l.t)} ${l.lvl.padEnd(5)} ${l.msg}`;el.append(d)}
+  $("lcount").textContent=`${OV.logs.length} lines`;if(near)el.scrollTop=el.scrollHeight}
+const logText=()=>OV.logs.map(l=>`${hms(l.t)} ${l.lvl.padEnd(5)} ${l.msg}`).join("\n");
+async function openOverlay(g){
+  clearTimeout(OV.timer);
+  Object.assign(OV,{g,job:null,since:0,logs:[],shown:0,catalog:null,sel:new Set(),pulled:{},pulling:new Set(),cards:{},state:"inspecting",fail:0,filter:""});
+  $("ov").hidden=false;$("ovgrid").innerHTML=`<p class="id" id="ovempty">Loaded layers appear here as each one finishes.</p>`;$("ovsel").hidden=true;$("ovsteps").innerHTML="";$("ovcats").innerHTML="";$("ovf").value="";$("ovbar").style.width="0";renderLog(true);sum();
+  $("ovsub").textContent=`${g.ref?fmt(iso(g.ref),1):""} → ${g.sec?fmt(iso(g.sec),1):""} UTC · ${g.dir} ${g.track} frame ${g.frame}`;
+  try{const r=await api("/api/inspect",{id:g.id});OV.job=r.job;$("ovsub").textContent+=` · box ${r.bbox.join(", ")}`}catch(e){ovLocal("ERROR",e.message);OV.state="error";sum();return}
+  ovPoll()}
+async function ovPoll(){
+  clearTimeout(OV.timer);const o=OV,job=o.job;
+  try{
+    const j=await api(`/api/lj?id=${job}&since=${o.since}`);if(job!==OV.job)return;
+    o.since=j.next;o.logs.push(...j.log);renderLog();o.state=j.state;o.fail=0;renderSteps(j);
+    if(j.ready&&!o.catalog){o.catalog=await api("/api/catalog?id="+job);o.catalog.layers.filter(PRE.core).forEach(l=>{if(!l.unavailable)o.sel.add(l.path)});renderSel()}
+    paint(j);pullDone(o,j);
+  }catch(e){o.fail++;ovLocal("ERROR",`status request failed (${o.fail}): ${e.message}`)}
+  if(job===OV.job&&o.fail<10&&(o.fail||o.state==="inspecting"||o.state==="loading"))o.timer=setTimeout(ovPoll,o.fail?2000:500)}
+function renderSteps(j){
+  $("ovsteps").innerHTML=j.steps.map(s=>{const d=((s.t1||j.now)-s.t0).toFixed(1),c=s.status==="ok"?"ok":s.status==="error"?"bad":"run";
+    return `<div class="step"><span>${esc(s.name)}</span><span class="pill ${c}">${s.status==="ok"?"done":s.status==="error"?"failed":"running"} ${d}s</span>${s.detail?`<div class="d">${esc(s.detail)}</div>`:""}</div>`}).join("")
+    +(j.error?`<p class="err">${esc(j.error)} (details in the log below)</p>`:"")}
+function renderSel(){
+  const o=OV,t=o.filter.toLowerCase(),by={};$("ovsel").hidden=false;
+  o.catalog.layers.filter(l=>!t||l.path.toLowerCase().includes(t)).forEach(l=>(by[l.cat]??=[]).push(l));
+  $("ovcats").innerHTML=o.catalog.categories.filter(k=>by[k.key]).map(k=>{const ls=by[k.key];
+    return `<details class="cat" ${ls.length<=6||ls.some(l=>o.sel.has(l.path))?"open":""}><summary><input type="checkbox" class="ck" style="width:auto"><b>${esc(k.label)}</b><span class="id">${ls.length} · ${esc(k.note)}</span></summary>`
+    +ls.map(l=>`<label class="lr" title="${esc(l.path)}"><input type="checkbox" style="width:auto;margin-top:2px" data-p="${esc(l.path)}"${l.unavailable?" disabled":""}${o.sel.has(l.path)?" checked":""}><span>${esc(l.path.split("/").slice(-3).join("/"))}<br><span class="id">${esc(l.shape.join("×"))} · ${esc(l.dtype)} · whole layer ${mb(l.full)} MB, only the box is read</span></span><span class="pill" data-s="${esc(l.path)}" hidden></span></label>`).join("")+`</details>`}).join("")||`<p class="id">no layers match</p>`;
+  syncCats();if(o.last)paint(o.last)}
+function syncCats(){
+  document.querySelectorAll("#ovcats .cat").forEach(d=>{const b=[...d.querySelectorAll("[data-p]:not(:disabled)")],n=b.filter(x=>x.checked).length,k=d.querySelector(".ck");
+    k.checked=!!b.length&&n===b.length;k.indeterminate=n>0&&n<b.length;k.disabled=!b.length});sum()}
+function sum(){
+  const o=OV,c=o.catalog,busy=o.state==="loading"||o.state==="inspecting",ls=c?c.layers.filter(l=>o.sel.has(l.path)):[],m=0;
+  $("ovsum").textContent=c?`${ls.length} layer${ls.length===1?"":"s"} selected · only your box is read (its size is logged when each layer starts)`:o.state==="error"?"inspection failed, see the log":"inspecting the file…";
+  $("ovgo").textContent=`Load ${ls.length} layer${ls.length===1?"":"s"}`;$("ovgo").disabled=!ls.length||busy;$("ovcancel").hidden=o.state!=="loading"}
+function paint(j){
+  OV.last=j;
+  document.querySelectorAll("#ovcats [data-s]").forEach(p=>{const L=j.layers[p.dataset.s];if(!L){p.hidden=true;return}
+    const e=((L.t1||j.now)-(L.t0||j.now)).toFixed(1);p.hidden=false;p.title=L.error||"";
+    p.className="pill "+(L.status==="done"?"ok":L.status==="failed"?"bad":L.status==="reading"?"run":"");
+    p.textContent=L.status==="reading"?`reading ${e}s`:L.status==="done"?`done ${e}s${L.cached?" (cached)":""}`:L.status==="failed"?"failed: "+L.error:L.status});
+  $("ovbar").style.width=(j.total?j.done/j.total*100:0)+"%";sum()}
+async function pullDone(o,j){
+  for(const[p,L]of Object.entries(j.layers)){
+    if(L.status!=="done"||o.pulled[p]===L.t1||o.pulling.has(p))continue;
+    o.pulling.add(p);
+    try{const job=o.job,d=await api(`/api/layer?job=${job}&path=${encodeURIComponent(p)}`);if(OV.job!==job)return;d.items.forEach(addCard)}
+    catch(e){ovLocal("ERROR",`could not fetch ${p}: ${e.message}`)}
+    o.pulled[p]=L.t1;o.pulling.delete(p)}}
+function addCard(L){
+  L.f=b64f32(L.data);delete L.data;
+  const d=defaults(L),el=document.createElement("div"),num=v=>v==null?"":+(+v).toPrecision(5),key=L.path+"|"+L.label;el.className="card";
+  el.innerHTML=`<b>${esc(L.label)}</b> <span class="id">${esc(L.path.split("/").slice(-4,-1).join("/"))}</span>
+  <canvas width="${L.w}" height="${L.h}"></canvas>
+  <div class="ctl"><select class="cm">${["viridis","diverging","gray","cyclic","categorical"].map(c=>`<option${c===d.cm?" selected":""}>${c}</option>`).join("")}</select>
+  min <input class="lo" value="${num(d.lo)}"> max <input class="hi" value="${num(d.hi)}">
+  ${L.nz>1?`<input class="z" type="range" min="0" max="${L.nz-1}" value="${L.nz>>1}"><span class="zl"></span>`:""}
+  <button class="ghost png">PNG</button></div>
+  <div class="id">${L.w}×${L.h} px${L.step>1?` (every ${L.step}th pixel)`:""}, ${(L.valid*100).toFixed(0)}% valid, range ${num(L.min)} to ${num(L.max)}${L.units?" "+esc(L.units):""}, ${esc(L.dtype)}</div>
+  <div class="id hov">hover the image for a value</div>`;
+  $("ovempty")?.remove();
+  if(OV.cards[key]&&OV.cards[key].isConnected)OV.cards[key].replaceWith(el);else $("ovgrid").append(el);OV.cards[key]=el;
+  const cv=el.querySelector("canvas"),ctx=cv.getContext("2d"),q=s=>el.querySelector(s),zi=q(".z");
+  const paintCv=()=>{
+    const k=zi?+zi.value:0,off=k*L.w*L.h,lo=+q(".lo").value,hi=+q(".hi").value,cm=q(".cm").value,u=cm==="categorical"?null:lut(cm),img=ctx.createImageData(L.w,L.h),px=img.data;
+    for(let i=0;i<L.w*L.h;i++){const v=L.f[off+i],o=i*4;if(v!==v)continue;
+      let r,g,b;if(u){const j=Math.max(0,Math.min(255,((v-lo)/((hi-lo)||1)*255)|0));r=u[j*3];g=u[j*3+1];b=u[j*3+2]}else[r,g,b]=catRGB(v);
+      px[o]=r;px[o+1]=g;px[o+2]=b;px[o+3]=255}
+    ctx.putImageData(img,0,0);if(zi)q(".zl").textContent=`${k+1}/${L.nz}`};
+  el.querySelectorAll("select,.lo,.hi,.z").forEach(x=>x.oninput=paintCv);paintCv();
+  cv.onpointermove=e=>{const b=cv.getBoundingClientRect(),u=(e.clientX-b.left)/b.width,v=(e.clientY-b.top)/b.height,c=Math.min(L.w-1,u*L.w|0),r=Math.min(L.h-1,v*L.h|0),
+    val=L.f[(zi?+zi.value:0)*L.w*L.h+r*L.w+c],[a,bb,cc]=L.corners,lon=a[0]+(bb[0]-a[0])*u+(cc[0]-a[0])*v,lat=a[1]+(bb[1]-a[1])*u+(cc[1]-a[1])*v;
+    q(".hov").textContent=`row ${r*L.step}, col ${c*L.step}   ${val!==val?"no data":num(val)}   ≈ ${lon.toFixed(5)}, ${lat.toFixed(5)}`};
+  q(".png").onclick=()=>{const a=document.createElement("a");a.download=L.label.replace(/\W+/g,"_")+".png";a.href=cv.toDataURL();a.click()}}
+$("ovcats").addEventListener("change",e=>{const t=e.target,o=OV;
+  if(t.dataset.p)t.checked?o.sel.add(t.dataset.p):o.sel.delete(t.dataset.p);
+  else if(t.classList.contains("ck"))t.closest("details").querySelectorAll("[data-p]:not(:disabled)").forEach(b=>{b.checked=t.checked;t.checked?o.sel.add(b.dataset.p):o.sel.delete(b.dataset.p)});
+  syncCats()});
+document.querySelectorAll("[data-pre]").forEach(b=>b.onclick=()=>{OV.sel=new Set(OV.catalog.layers.filter(l=>!l.unavailable&&PRE[b.dataset.pre](l)).map(l=>l.path));renderSel()});
+$("ovf").oninput=e=>{OV.filter=e.target.value;if(OV.catalog)renderSel()};
+$("ovgo").onclick=async()=>{const o=OV;try{await api("/api/load",{job:o.job,paths:[...o.sel]});o.state="loading";sum();ovPoll()}catch(e){ovLocal("ERROR",e.message)}};
+$("ovcancel").onclick=()=>api("/api/cancel",{job:OV.job}).then(()=>ovLocal("INFO","cancel requested: the layer being read finishes, the rest are skipped")).catch(e=>ovLocal("ERROR",e.message));
+$("lvl").onchange=()=>renderLog(true);
+$("lcopy").onclick=()=>navigator.clipboard.writeText(logText()).then(()=>ovLocal("INFO","log copied"),e=>ovLocal("ERROR","copy failed: "+e.message));
+$("ldl").onclick=()=>{const a=document.createElement("a");a.download=`nisar_load_${OV.job||"x"}.log`;a.href=URL.createObjectURL(new Blob([logText()+"\n"],{type:"text/plain"}));a.click()};
+const closeOv=()=>{clearTimeout(OV.timer);$("ov").hidden=true};
+$("ovx").onclick=closeOv;document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("ov").hidden)closeOv()});
+
+/* ---------- search + clip ---------- */
+async function search(){
+  $("go").disabled=true;$("status").textContent="searching ASF…";
+  try{const d=await api("/api/search",{bbox:[$("w").value,$("s").value,$("e").value,$("n").value],level:$("level").value,start:$("start").value,end:$("end").value,max:1000});
+    G=d.granules;sel=null;const ts=G.flatMap(g=>[iso(g.t0),iso(g.t1)]);
+    full=ts.length?[Math.min(...ts)-3*DAY,Math.max(...ts)+3*DAY]:[Date.now()-DAY*30,Date.now()];view=full.slice();
+    applyFilters();if(d.capped)$("status").textContent+="  (search cap reached, narrow the dates)";
+  }catch(e){$("status").textContent="";alert(e.message)}
+  $("go").disabled=false}
+async function clip(ids){
+  try{const{job}=await api("/api/clip",{ids,layers:$("layers").value.trim(),workers:+$("workers").value||4});poll(job)}catch(e){alert(e.message)}}
+async function poll(job){
+  const j=await api("/api/job?id="+job);
+  $("jobs").innerHTML=`${j.running?"clipping":"finished"}: ${j.done}/${j.total}${j.error?` <span class="err">${esc(j.error)}</span>`:""}<br>`+
+   Object.entries(j.items).slice(-4).map(([n,s])=>`${esc(s.status.slice(0,40))} ${esc(n.slice(-60))}`).join("<br>");
+  if(j.running)setTimeout(()=>poll(job),2000)}
+$("go").onclick=search;$("clip").onclick=()=>clip(shown().map(g=>g.id));
+$("preset").onchange=e=>{$("layers").value=e.target.value};
+["dom","tfrom","tto","on","dir","track","text"].forEach(i=>$(i).addEventListener("input",applyFilters));
+$("inview").onchange=()=>{draw();status()};
+api("/api/config").then(c=>{cfg=c;[$("w").value,$("s").value,$("e").value,$("n").value]=c.bbox;$("level").value=c.level;$("start").value=c.start;$("end").value=c.end;
+  $("jobs").textContent="clips go to "+c.out+(c.login?"":"  (started with --no-login: details and clipping will fail)");search()});
+</script>
+</body>
+</html>
